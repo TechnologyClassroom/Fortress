@@ -1,2 +1,3 @@
-# In this file, you should put the IPs you don't want blocked.
-# One IP/range per line.
+# In this file, place the IPs you do not want blocked. One IP/range per line.
+127.0.0.0/8
+::1/128

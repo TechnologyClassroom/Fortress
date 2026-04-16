@@ -2,7 +2,7 @@ Name:		fortress
 Version:	1.0
 Release:	3
 Summary:	Fortress connection monitoring and protection
-License:	GPLv2
+License:	GPL-2.0-or-later
 URL:		https://github.com/hackman/Fortress
 Source0:	%{name}-%{version}.tgz
 BuildArch:	noarch
@@ -12,10 +12,9 @@ Provides:	fortress
 AutoReqProv: no
 
 %description
-This package provides the Fortress connection monitoring and
-protection system.
-It monitors TCP and UDP connections and automaticaly blocks
-and unblocks IPs that may put the machine at risk.
+This package provides the Fortress connection monitoring and protection system.
+It monitors TCP and UDP connections and automaticaly blocks and unblocks IPs
+that may put the machine at risk.
 
 %prep
 %setup -q

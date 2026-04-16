@@ -1,4 +1,23 @@
 #!/usr/bin/perl
+
+# fortress.pl
+# Copyright (C) 2023 Marian Marinov <mm@yuhu.biz>
+# IP detector for Fortress. https://github.com/hackman/Fortress
+
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see
+# <https://www.gnu.org/licenses/>.
+
 use strict;
 use warnings;
 use POSIX qw(strftime setsid);
@@ -20,12 +39,13 @@ my $excludes = new Net::Patricia;
 my $load = 0;
 
 open my $conf_file, '<', $config_path or die "Error: Cannot open configuration file($config_path): $!";
-# Read the configuration file, by skipping all lines that start with # and remove any quotes
+# Read the configuration file, by skipping all lines that start with # and
+# remove any quotes.
 while (my $line = <$conf_file>) {
     next if ($line !~ /^\s*\w/);
     $line =~ s/[\s\r\n]*$//g;
     $line =~ s/['"]*$//g;
-    my ($key, $val) = split /=/, $line, 2; 
+    my ($key, $val) = split /=/, $line, 2;
     $config{$key} = $val;
 }
 close $conf_file;
@@ -70,10 +90,10 @@ sub block_ip {
 	my $blocked_ref = shift;
 	my $ip = shift;
 	my $msg = shift;
-	return if (exists $blocked_ref->{$ip});	   # already blocked
+	return if (exists $blocked_ref->{$ip});	 # Already blocked.
 
 	logger($conf_ref, $msg);
-	
+
 	$blocked_ref->{$ip}=time();
 	system($conf_ref->{'block_script'}, $ip, $msg);
 }
@@ -90,7 +110,7 @@ sub get_local_ips {
 	return;
 }
 
-# Make sure none of the local IPs on the machine gets accidentally blocked
+# Make sure none of the local IPs on the machine gets accidentally blocked.
 get_local_ips($excludes);
 
 if (exists $config{'exclude_files'} and $config{'exclude_files'} ne '') {
@@ -118,7 +138,7 @@ if (!exists $config{'block_script'} or ! -x $config{'block_script'}) {
 	die "Error: missing block_script or $config{'block_script'} not executable\n";
 }
 
-# check if the daemon is running
+# Check if the daemon is running.
 if ( -e $config{'pid_file'} ) {
 	# get the old pid
 	umask 077;
@@ -164,11 +184,11 @@ if (!exists($config{'ports'}) or $config{'ports'} eq '') {
 	$config{'ports'} = '80 443';
 }
 
-# Convert the port numbers to hex and put them in a hash
+# Convert the port numbers to hex and put them in a hash.
 %ports = map { sprintf('%04X', $_) => 1 } split /\s+/, $config{'ports'};
 
-# This is used only to optimize the check in the loop later.
-# This way we don't need to convert every hex port from the file to decimal.
+# This is used only to optimize the check in the loop later. This way we do not
+# need to convert every hex port from the file to decimal.
 my %monitored_states = (
 	'01' => 'ESTABLISHED',
 	'03' => 'SYN_RECV'
@@ -179,26 +199,29 @@ logger(\%config, "$0 version $VERSION started");
 logger(\%config, "Ports monitored: $config{'ports'}");
 logger(\%config, "High load set to: $config{'high_load'}");
 while (1) {
-	# Make sure we start the loop with empty values
+	# Make sure we start the loop with empty values.
 	%established= ();
 	%syn_sent = ();
 	$counter++;
-	# We use a counter here, instead of actual times as it is more efficient. The counter is not so suffisticated, as
-	# the code, some times may not execute in less then 1sec. But we don't need high accuracy here.
-	clean_ips(\%config, $blocked_ips)	if ($counter%10 == 0);	# execute every 10th time (10sec)
-	$load = get_load(\%config)			if ($counter%5  == 0);	# get the current load every 5 seconds
-	$counter=0  						if ($counter > 10000);	# reset the counter to prevent comparison of very high numbers
-	store \%blocked, $config{'store_db'} if ($counter%120 == 0);# execute every 120th time (rufly every 120sec)
+	# We use a counter here, instead of actual times as it is more
+	# efficient. The counter is not so sophisticated, as the code, some
+	# times may not execute in less then 1 second. But we do not need high
+	# accuracy here.
+	clean_ips(\%config, $blocked_ips)	if ($counter%10 == 0);	# Execute every 10th time (10sec).
+	$load = get_load(\%config)			if ($counter%5  == 0);	# Get the current load every 5 seconds.
+	$counter=0  						if ($counter > 10000);	# Reset the counter to prevent comparison of very high numbers.
+	store \%blocked, $config{'store_db'} if ($counter%120 == 0);  # Execute every 120th time (roughly every 120sec).
 
 	my $conn_count = $config{'low_conns'};
 	my $syn_count  = $config{'low_syn_recv_conns'};
-	# We do this check here, otherwise we would need to do it in the loop, just before we check the $established count.
+	# We do this check here, otherwise we would need to do it in the loop,
+	# just before we check the $established count.
 	if ($load > $config{'high_load'}) {
 		$conn_count = $config{'high_conns'};
 		$syn_count  = $config{'high_syn_recv_conns'};
 	}
 
-	# Collect the stats
+	# Collect the stats.
 	open my $tcp, '<', '/proc/net/tcp' or die "Error: Failed to open /proc/net/tcp: $!";
 	while (<$tcp>) {
 		#  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
@@ -210,11 +233,13 @@ while (1) {
 		my $remote_hex_port	= $4;
 		my $state			= $5;
 
-		# Do not check states other then ESTABLISHED and SYN_RECV
+		# Do not check states other then ESTABLISHED and SYN_RECV.
 		next if (!exists $monitored_states{$state});
-		# The IP is written in reverse byte order, in hex. This converts each two hex chars into a number and at the end returns the dotted IPv4 format, that is expected.
+		# The IP is written in reverse byte order, in hex. This
+		# converts each two hex chars into a number and at the end
+		# returns the dotted IPv4 format, that is expected.
 		my $ip = hex(substr($remote_hex_ip,6,2)) . '.' . hex(substr($remote_hex_ip,4,2)) . '.' . hex(substr($remote_hex_ip,2,2)) . '.' . hex(substr($remote_hex_ip,0,2));
-		# Do not continue if the IP is in the excluded list
+		# Do not continue if the IP is in the excluded list.
 		next if ($excludes->match_string($ip));
 
 		# States:
@@ -223,19 +248,22 @@ while (1) {
 		#   06 - TIME_WAIT
 		#   08 - CLOSE_WAIT
 
-		# This is to catch smaller SYN flood attacks, usually dispersed between multiple source IPs.
-		# This should be checked no matter the load value.
+		# This is to catch smaller SYN flood attacks, usually dispersed
+		# between multiple source IPs. This should be checked no matter
+		# the load value.
 		if ($state eq '03') {
 			$syn_sent{$ip}++;
 		}
 
-		# Check established conns, if the port is one of the ports configured to be monitored
+		# Check established conns, if the port is one of the ports
+		# configured to be monitored.
 		if ($state eq '01' and exists $ports{$local_hex_port}) {
 			$established{$ip}++;
 		}
 	}	# read /proc/net/tcp
 
-	# Check if we need to block any IP. We do it here and not in the above loop, so we know what was the actual number of conns from the IP.
+	# Check if we need to block any IP. We do it here and not in the above
+	# loop, so we know what was the actual number of conns from the IP.
 	while (my ($ip, $conns) = each(%syn_sent)) {
 		if ($syn_sent{$ip} > $syn_count) {
 			block_ip(\%config, $blocked_ips, $ip, "Blocking IP $ip for having more then $syn_count($syn_sent{$ip}) SYN_RECV connections");

@@ -3,7 +3,7 @@ Description=Fortress connection blocking service
 After=network.target
 
 [Service]
-# Disable OOM kill for this process
+# Disable OOM kill for this process.
 OOMScoreAdjust=-1000
 ExecStart=/usr/sbin/fortress
 TimeoutSec=15
