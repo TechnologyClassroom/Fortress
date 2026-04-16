@@ -36,8 +36,8 @@ if [[ $# -eq 0 ]]; then
 fi
 
 if [[ ! $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Error: invalid IP format"
-  exit
+  echo "Error: Invalid IP format."
+  exit 1
 fi
 
 # Parameters:
@@ -48,11 +48,11 @@ ipset_unblock() {
   shift
   ipset_name=$( awk -F= '/ipset_name/  && $1 !~ /^\s*#/ {print $2}' $config)
   if [[ -z $ipset_name ]]; then
-    echo "Error: unable to find ipset_name in $config."
+    echo "Error: Unable to find ipset_name in $config."
     echo -e "Please check the configuration and try again.\n"
-    exit
+    exit 1
   fi
-  ipset del $ipset_name $ip 2>/dev/null
+  ipset del "$ipset_name" "$ip" 2>/dev/null
 }
 
 # Parameters:
@@ -67,9 +67,9 @@ iptables_unblock() {
     chain=$chain_name
   fi
   if [[ -n $1 ]]; then
-    iptables -D $chain -j DROP -s $ip -m comment --comment "$*"
+    iptables -D "$chain" -j DROP -s "$ip" -m comment --comment "$*"
   else
-    iptables -D $chain -j DROP -s $ip
+    iptables -D "$chain" -j DROP -s "$ip"
   fi
 }
 
@@ -80,22 +80,22 @@ redirection() {
     echo "No redirect IP defined. Quiting without redirection."
     exit 1
   fi
-  iptables -t nat -D PREROUTING -j DNAT -s $1 -p tcp --dport 80  --to $redirect_ip
-  iptables -t nat -D PREROUTING -j DNAT -s $1 -p tcp --dport 443 --to $redirect_ip
-  iptables -t nat -D PREROUTING -j DNAT -s $1 -p udp --dport 443 --to $redirect_ip
+  iptables -t nat -D PREROUTING -j DNAT -s "$1" -p tcp --dport 80  --to "$redirect_ip"
+  iptables -t nat -D PREROUTING -j DNAT -s "$1" -p tcp --dport 443 --to "$redirect_ip"
+  iptables -t nat -D PREROUTING -j DNAT -s "$1" -p udp --dport 443 --to "$redirect_ip"
 }
 
 case "$block_type" in
   ipset)
-    ipset_unblock $*
+    ipset_unblock "$*"
   ;;
   iptables)
-    iptables_unblock $*
+    iptables_unblock "$*"
   ;;
   redirect)
-    redirection $*
+    redirection "$*"
   ;;
   *)
-    echo "Error: unsupported block type in the configuration $config"
+    echo "Error: Unsupported block type in the configuration $config"
   ;;
 esac

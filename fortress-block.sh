@@ -22,7 +22,7 @@ config=/etc/fortress/fortress.conf
 
 if [[ ! -f $config ]]; then
   echo "Missing configuration file: $config"
-  exit
+  exit 1
 fi
 redirect_ip=$(awk -F= '/redirect_ip/ && $1 !~ /^\s*#/ {print $2}' $config)
 block_type=$( awk -F= '/block_type/  && $1 !~ /^\s*#/ {print $2}' $config)
@@ -33,12 +33,12 @@ comment=''
 
 if [[ $# -eq 0 ]]; then
   echo "Usage: $0 IP [comment]"
-  exit
+  exit 1
 fi
 
 if [[ ! $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Error: invalid IP format"
-  exit
+  echo "Error: Invalid IP format."
+  exit 1
 fi
 
 # Parameters:
@@ -49,14 +49,14 @@ ipset_block() {
   shift
   ipset_name=$( awk -F= '/ipset_name/  && $1 !~ /^\s*#/ {print $2}' $config)
   if [[ -z $ipset_name ]]; then
-    echo "Error: unable to find ipset_name in $config."
+    echo "Error: Unable to find ipset_name in $config."
     echo -e "Please check the configuration and try again.\n"
     exit
   fi
   if [[ -n $1 ]]; then
-    ipset add $ipset_name $ip comment "$*" timeout $block_time
+    ipset add "$ipset_name" "$ip" comment "$*" timeout "$block_time"
   else
-    ipset add $ipset_name $ip
+    ipset add "$ipset_name" "$ip"
   fi
 }
 
@@ -72,9 +72,9 @@ iptables_block() {
     chain=$chain_name
   fi
   if [[ -n $1 ]]; then
-    iptables -I $chain -j DROP -s $ip -m comment --comment "$*"
+    iptables -I "$chain" -j DROP -s "$ip" -m comment --comment "$*"
   else
-    iptables -I $chain -j DROP -s $ip
+    iptables -I "$chain" -j DROP -s "$ip"
   fi
 }
 
@@ -85,22 +85,22 @@ redirection() {
     echo "No redirect IP defined. Quiting without redirection."
     exit 1
   fi
-  iptables -t nat -A PREROUTING -j DNAT -s $1 -p tcp --dport 80  --to $redirect_ip
-  iptables -t nat -A PREROUTING -j DNAT -s $1 -p tcp --dport 443 --to $redirect_ip
-  iptables -t nat -A PREROUTING -j DNAT -s $1 -p udp --dport 443 --to $redirect_ip
+  iptables -t nat -A PREROUTING -j DNAT -s "$1" -p tcp --dport 80  --to "$redirect_ip"
+  iptables -t nat -A PREROUTING -j DNAT -s "$1" -p tcp --dport 443 --to "$redirect_ip"
+  iptables -t nat -A PREROUTING -j DNAT -s "$1" -p udp --dport 443 --to "$redirect_ip"
 }
 
 case "$block_type" in
   ipset)
-    ipset_block $*
+    ipset_block "$*"
   ;;
   iptables)
-    iptables_block $*
+    iptables_block "$*"
   ;;
   redirect)
-    redirection $*
+    redirection "$*"
   ;;
   *)
-    echo "Error: unsupported block type in the configuration $config"
+    echo "Error: Unsupported block type in the configuration $config"
   ;;
 esac
