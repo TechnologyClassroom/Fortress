@@ -37,16 +37,17 @@ my %config = ();
 my $config_path = '/etc/fortress/fortress.conf';
 my $excludes = new Net::Patricia;
 my $load = 0;
+my $ipset_name = '';
 
 open my $conf_file, '<', $config_path or die "Error: Cannot open configuration file($config_path): $!";
 # Read the configuration file, by skipping all lines that start with # and
 # remove any quotes.
 while (my $line = <$conf_file>) {
-    next if ($line !~ /^\s*\w/);
-    $line =~ s/[\s\r\n]*$//g;
-    $line =~ s/['"]*$//g;
-    my ($key, $val) = split /=/, $line, 2;
-    $config{$key} = $val;
+	next if ($line !~ /^\s*\w/);
+	$line =~ s/[\s\r\n]*$//g;
+	$line =~ s/['"]*$//g;
+	my ($key, $val) = split /=/, $line, 2;
+	$config{$key} = $val;
 }
 close $conf_file;
 
@@ -110,6 +111,18 @@ sub get_local_ips {
 	return;
 }
 
+# Bootstrap ipset if configured to use ipset.
+# - Set $ipset_name if $config{'ipset_name'} exists.
+# - If $ipset_name is not empty, boot strap the required steps to get ipset
+#   working.
+# - Check if ipset exists.
+# - Create ipset for fortress.
+#   ipset -exist -N fortress4 hash:net family inet maxelem 100000
+# - Check if iptables rules exist.
+# - Create iptables rules for fortress ipset.
+#   iptables -w 10 -I INPUT 1 -m set --match-set fortress4 src -j DROP
+#   iptables -w 10 -I FORWARD 1 -m set --match-set fortress4 src -j DROP
+
 # Make sure none of the local IPs on the machine gets accidentally blocked.
 get_local_ips($excludes);
 
@@ -140,13 +153,13 @@ if (!exists $config{'block_script'} or ! -x $config{'block_script'}) {
 
 # Check if the daemon is running.
 if ( -e $config{'pid_file'} ) {
-	# get the old pid
+	# Get the old pid.
 	umask 077;
 	open my $PIDFILE, '<', $config{'pid_file'} or die "Error: Can't open pid file(".$config{'pid_file'}."): $!\n";
 	$old_pid = <$PIDFILE>;
 	close $PIDFILE;
 	umask($umask);
-	# check if $old_pid is still running
+	# Check if $old_pid is still running.
 	if ( $old_pid =~ /[0-9]+/ ) {
 		if ( -d "/proc/$old_pid" ) {
 			die "Error: Fortress is already running!\n";
