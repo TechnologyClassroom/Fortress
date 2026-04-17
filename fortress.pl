@@ -114,8 +114,8 @@ sub get_local_ips {
 # ipset bootstrapping
 if( $config{'block_type'} eq 'ipset' ) {
   # take ipset name from $config{'ipset_name'} when defined
-  # otherwise use "fortress" as a default ipset name
-  $ipset_name = $config{'ipset_name'} || 'fortress';
+  # otherwise use "fortressv4" as a default ipset name
+  $ipset_name = $config{'ipset_name'} || 'fortressv4';
   
   # Check if ipset exists.
   # grep lines returned when listing kernel ipset names
