@@ -111,17 +111,43 @@ sub get_local_ips {
 	return;
 }
 
-# Bootstrap ipset if configured to use ipset.
-# - Set $ipset_name if $config{'ipset_name'} exists.
-# - If $ipset_name is not empty, boot strap the required steps to get ipset
-#   working.
-# - Check if ipset exists.
-# - Create ipset for fortress.
-#   ipset -exist -N fortress4 hash:net family inet maxelem 100000
-# - Check if iptables rules exist.
-# - Create iptables rules for fortress ipset.
-#   iptables -w 10 -I INPUT 1 -m set --match-set fortress4 src -j DROP
-#   iptables -w 10 -I FORWARD 1 -m set --match-set fortress4 src -j DROP
+# ipset bootstrapping
+if( $config{'block_type'} eq 'ipset' ) {
+  # take ipset name from $config{'ipset_name'} when defined
+  # otherwise use "fortressv4" as a default ipset name
+  $ipset_name = $config{'ipset_name'} || 'fortressv4';
+  
+  # Check if ipset exists.
+  # grep lines returned when listing kernel ipset names
+  unless(grep /\b$ipset_name\b/,  qx/ipset list -n/) {
+    # the set does not exist, create
+    my $create_command = 
+	  qq(ipset -exist -N $ipset_name hash:net family inet maxelem 100000);
+    
+	# system should return zero if all goes well
+    unless(system( $create_command )) {
+	  # handle error, e.g.
+	  die qq(failed to create ipset; fix this issue or try another block_type; $!);
+	}
+  }
+  
+  # - Check if iptables rules exist.
+  my @iptables_args = ( 
+    qq(-w 10 -I INPUT 1 -m set --match-set $ipset_name src -j DROP),
+    qq(-w 10 -I FORWARD 1 -m set --match-set $ipset_name src -j DROP)
+  );
+  for my$args (@iptables_args) {
+    # - Create iptables rules for fortress ipset.
+	if(system( qq(iptables -C $args) )) {
+
+	  # rule does not exist, create
+      unless(system( qq(iptables $args) )) {
+		# handle error, or don't. e.g.
+		die qq(failed to create iptable for ipset; fix this issue or try another block_type; $!);
+	  }
+	}
+  }
+}
 
 # Make sure none of the local IPs on the machine gets accidentally blocked.
 get_local_ips($excludes);
