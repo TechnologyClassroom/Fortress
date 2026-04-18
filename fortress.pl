@@ -101,7 +101,7 @@ sub block_ip {
 
 sub get_local_ips {
 	my $excluded_ref = shift;
-	open my $ips, '-|', '/usr/sbin/ip -4 a l';
+	open my $ips, '-|', '/sbin/ip -4 a l';
 	while(my $line = <$ips>) {
 		if ($line =~ /inet ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/[0-9]+/) {
 			$excluded_ref->add_string($1, 'local');
@@ -111,42 +111,49 @@ sub get_local_ips {
 	return;
 }
 
+sub run_setup_command {
+    my( $action, $errstring, $command ) = @_;
+
+    warn qq(info: running $action with # $command\n);
+    die qq(failed to $action; $errstring; $!) if system( $command );
+}
+
+sub try_setup_command {
+    my( $action, $command ) = @_;
+
+    warn qq(info: probing for $action with # $command\n);
+    system( qq($command >/dev/null 2>&1) );
+}
+
 # ipset bootstrapping
 if( $config{'block_type'} eq 'ipset' ) {
-  # take ipset name from $config{'ipset_name'} when defined
-  # otherwise use "fortressv4" as a default ipset name
-  $ipset_name = $config{'ipset_name'} || 'fortressv4';
-  
-  # Check if ipset exists.
-  # grep lines returned when listing kernel ipset names
-  unless(grep /\b$ipset_name\b/,  qx/ipset list -n/) {
-    # the set does not exist, create
-    my $create_command = 
-	  qq(ipset -exist -N $ipset_name hash:net family inet maxelem 100000);
-    
-	# system should return zero if all goes well
-    unless(system( $create_command )) {
-	  # handle error, e.g.
-	  die qq(failed to create ipset; fix this issue or try another block_type; $!);
-	}
-  }
-  
-  # - Check if iptables rules exist.
-  my @iptables_args = ( 
-    qq(-w 10 -I INPUT 1 -m set --match-set $ipset_name src -j DROP),
-    qq(-w 10 -I FORWARD 1 -m set --match-set $ipset_name src -j DROP)
-  );
-  for my$args (@iptables_args) {
-    # - Create iptables rules for fortress ipset.
-	if(system( qq(iptables -C $args) )) {
+	# Take ipset name from $config{'ipset_name'} when defined otherwise use
+	# "fortressv4" as a default ipset name.
+	$ipset_name = $config{'ipset_name'} || 'fortressv4';
 
-	  # rule does not exist, create
-      unless(system( qq(iptables $args) )) {
-		# handle error, or don't. e.g.
-		die qq(failed to create iptable for ipset; fix this issue or try another block_type; $!);
-	  }
+	# Add ipset using -exist to prevent errors when it already exists.
+	my $ipset_create_command =
+		qq(ipset -exist -N $ipset_name hash:net family inet maxelem 100000);
+	# iptables command are modified to create "probing" versions.
+	my @iptables_cmds = (
+		qq[iptables -I INPUT -m set --match-set $ipset_name src -j DROP],
+		qq[iptables -I FORWARD -m set --match-set $ipset_name src -j DROP]
+	);
+
+	run_setup_command(
+		'create ipset',
+		'fix this issue or try another block_type',
+		$ipset_create_command
+	);
+
+	for my$cmds (@iptables_cmds) { #
+		# Make a test version (-C) to avoid duplicating iptables entries.
+		my $testcmds = $cmds;
+		$testcmds =~ s/-I/-C/;
+		if(try_setup_command( 'iptable', $testcmds )) {
+			run_setup_command('iptable', 'check command manually for errors', $cmds);
+		}
 	}
-  }
 }
 
 # Make sure none of the local IPs on the machine gets accidentally blocked.
